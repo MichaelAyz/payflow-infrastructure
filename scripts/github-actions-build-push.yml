@@ -1,0 +1,65 @@
+name: Build and Push to Amazon ECR
+
+on:
+  push:
+    branches:
+      - monitoring
+      
+
+env:
+  AWS_REGION: us-east-1
+
+permissions:
+  id-token: write   # Required for requesting the JWT
+  contents: read    # Required for actions/checkout
+
+jobs:
+  build-and-push:
+    name: Build and Push Images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: api-gateway
+            context: services/api-gateway
+            ecr_repo: payflow/api-gateway
+          - service: auth
+            context: services/auth-service
+            ecr_repo: payflow/auth
+          - service: frontend
+            context: services/frontend
+            ecr_repo: payflow/frontend
+          - service: notification
+            context: services/notification-service
+            ecr_repo: payflow/notification
+          - service: transaction
+            context: services/transaction-service
+            ecr_repo: payflow/transaction
+          - service: wallet
+            context: services/wallet-service
+            ecr_repo: payflow/wallet
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          
+          role-to-assume: arn:aws:iam::647739191426:role/payflow-github-actions-role-dev
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ matrix.ecr_repo }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          cd ${{ matrix.context }}
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
